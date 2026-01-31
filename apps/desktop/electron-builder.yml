@@ -1,0 +1,25 @@
+appId: com.transcriber.desktop
+productName: Transcriber Desktop
+copyright: Copyright © 2026 Transcriber Team
+directories:
+  output: dist
+  buildResources: resources
+files:
+  - from: .
+    filter:
+      - package.json
+      - app
+publish: null
+win:
+  icon: resources/icon.ico
+  target:
+    - nsis
+nsis:
+  installerIcon: resources/icon.ico
+  uninstallerIcon: resources/icon.ico
+mac:
+  icon: resources/icon.svg
+  category: public.app-category.utilities
+linux:
+  icon: resources/icon.svg
+  category: Utility
