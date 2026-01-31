@@ -1,6 +1,7 @@
 # Transcriber
 
 A desktop application for local audio transcription using OpenAI's Whisper CLI.
+<img width="2560" height="1380" alt="Screenshot 2026-01-31 220859" src="https://github.com/user-attachments/assets/d36e6440-dbcb-417c-8683-43cbb9e16039" />
 
 ## ⚠️ Important Notice
 
