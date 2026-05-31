@@ -11,3 +11,9 @@ next-env.d.ts
 # build
 /app
 dist
+
+# bundled Python environment (built by: pnpm setup:python)
+# large binary files — not committed to git
+resources/python/
+# keep the downloaded zip cached between rebuilds (optional: also gitignore)
+resources/python-*.zip

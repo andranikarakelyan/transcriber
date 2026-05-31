@@ -9,6 +9,16 @@ files:
     filter:
       - package.json
       - app
+extraResources:
+  - from: main/transcribe.py
+    to: transcribe.py
+  # Bundled portable Python environment (created by: pnpm setup:python)
+  # Contains: Python 3.12, openai-whisper, torch-cpu
+  # GPU packages (DirectML/CUDA) are installed here by the in-app setup wizard
+  - from: resources/python
+    to: python
+    filter:
+      - "**/*"
 publish: null
 win:
   icon: resources/icon.ico

@@ -2,7 +2,7 @@
   "private": true,
   "name": "transcriber-desktop",
   "description": "Desktop application for local audio transcription using OpenAI's Whisper",
-  "version": "1.0.0",
+  "version": "1.1.0",
   "author": {
     "name": "Andranik Arakelyan",
     "email": "andranik.arakelyan.work@gmail.com"
@@ -10,7 +10,10 @@
   "main": "app/background.js",
   "scripts": {
     "dev": "nextron",
-    "build:win64": "nextron build --win --x64",
+    "setup:python": "node ../../scripts/setup-python-env.js",
+    "setup:python:force": "node ../../scripts/setup-python-env.js --force",
+    "build:win64": "node ../../scripts/setup-python-env.js && nextron build --win --x64",
+    "build:win64:fresh": "node ../../scripts/setup-python-env.js --force && nextron build --win --x64",
     "build:mac": "echo '⚠️  WARNING: macOS build is not tested yet!' && nextron build --mac",
     "build:linux": "echo '⚠️  WARNING: Linux build is not tested yet!' && nextron build --linux",
     "postinstall": "electron-builder install-app-deps"
@@ -23,7 +26,7 @@
     "@types/node": "^20.11.16",
     "@types/react": "^18.2.52",
     "autoprefixer": "^10.4.19",
-    "electron": "^34.0.0",
+    "electron": "34.5.8",
     "electron-builder": "^24.13.3",
     "next": "^14.2.4",
     "nextron": "^9.5.0",

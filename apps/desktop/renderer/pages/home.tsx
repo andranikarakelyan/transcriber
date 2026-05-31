@@ -8,8 +8,16 @@ interface QueueItem {
   fileName: string
   status: 'pending' | 'processing' | 'completed' | 'error' | 'cancelled'
   progress?: number
+  eta?: string
   error?: string
   outputPath?: string
+}
+
+interface GpuStatus {
+  cuda: boolean
+  rocm: boolean
+  directml: boolean
+  platform: string   // 'win32' | 'linux' | 'darwin'
 }
 
 const WHISPER_MODELS = ['tiny', 'base', 'small', 'medium', 'large']
@@ -40,30 +48,41 @@ const LANGUAGES = [
 ]
 
 export default function HomePage() {
-  const [whisperInstalled, setWhisperInstalled] = useState<boolean | null>(null)
   const [queue, setQueue] = useState<QueueItem[]>([])
   const [isProcessing, setIsProcessing] = useState(false)
   const [isPaused, setIsPaused] = useState(false)
-  const [isChecking, setIsChecking] = useState(false)
   const [selectedModel, setSelectedModel] = useState('tiny')
   const [selectedLanguage, setSelectedLanguage] = useState('auto')
   const [selectedFormat, setSelectedFormat] = useState('srt')
-  const [useCuda, setUseCuda] = useState(true)
+  const [selectedDevice, setSelectedDevice] = useState('auto')
+  const [gpuStatus, setGpuStatus] = useState<GpuStatus | null>(null)
 
   useEffect(() => {
-    // Check if Whisper CLI is installed
-    checkWhisperInstallation()
+    const ipc = (window as any).ipc
+    if (!ipc) return
+
+    // Check GPU/accelerator availability
+    ipc.send('check-gpu-status')
+    ipc.on('gpu-status', (status: GpuStatus) => {
+      setGpuStatus(status)
+      // If the currently selected device is unavailable, fall back to auto
+      setSelectedDevice(prev => {
+        if (prev === 'cuda' && !status.cuda) return 'auto'
+        if (prev === 'directml' && !status.directml) return 'auto'
+        if (prev === 'rocm' && !status.rocm) return 'auto'
+        return prev
+      })
+    })
 
     // Listen for transcription updates
-    const ipc = (window as any).ipc
-    if (ipc) {
-      const handleProgress = (data: { id: string; progress: number }) => {
-        updateQueueItem(data.id, { progress: data.progress })
+    {
+      const handleProgress = (data: { id: string; progress: number; eta?: string }) => {
+        updateQueueItem(data.id, { progress: data.progress, eta: data.eta })
       }
 
       const handleComplete = (data: { id: string; outputPath: string }) => {
         console.log('Transcription complete:', data.id)
-        updateQueueItem(data.id, { status: 'completed', progress: 100, outputPath: data.outputPath })
+        updateQueueItem(data.id, { status: 'completed', progress: 100, eta: undefined, outputPath: data.outputPath })
         // Trigger processing next item
         setTimeout(() => {
           setQueue(prevQueue => {
@@ -135,26 +154,6 @@ export default function HomePage() {
       }
     }
   }, [])
-
-  const checkWhisperInstallation = async () => {
-    setIsChecking(true)
-    setWhisperInstalled(null)
-    try {
-      const ipc = (window as any).ipc
-      if (ipc) {
-        ipc.send('check-whisper')
-        ipc.on('whisper-status', (installed: boolean) => {
-          setWhisperInstalled(installed)
-          setIsChecking(false)
-        })
-      }
-    } catch (error) {
-      console.error('Error checking Whisper installation:', error)
-      setWhisperInstalled(false)
-      setIsChecking(false)
-    }
-  }
-
   const handleSelectFile = async () => {
     try {
       const ipc = (window as any).ipc
@@ -196,7 +195,7 @@ export default function HomePage() {
 
   const requeueItem = (id: string) => {
     // Just reset the item to pending status (add back to queue)
-    updateQueueItem(id, { status: 'pending', progress: 0, error: undefined })
+    updateQueueItem(id, { status: 'pending', progress: 0, eta: undefined, error: undefined })
   }
 
   const clearCompleted = () => {
@@ -262,18 +261,18 @@ export default function HomePage() {
 
         console.log('Processing next item:', nextItem.fileName)
         setIsProcessing(true)
-        updateQueueItem(nextItem.id, { status: 'processing', progress: 0 })
+        updateQueueItem(nextItem.id, { status: 'processing', progress: 0, eta: undefined })
 
         const ipc = (window as any).ipc
         if (ipc) {
           ipc.send('transcribe-audio', {
-            id: nextItem.id,
-            filePath: nextItem.filePath,
-            model: selectedModel,
-            language: selectedLanguage === 'auto' ? null : selectedLanguage,
-            format: selectedFormat,
-            useCuda: useCuda,
-          })
+                            id: nextItem.id,
+                            filePath: nextItem.filePath,
+                            model: selectedModel,
+                            language: selectedLanguage === 'auto' ? null : selectedLanguage,
+                            format: selectedFormat,
+                            device: selectedDevice,
+                          })
         }
         
         return prevPaused
@@ -326,20 +325,6 @@ export default function HomePage() {
     const ipc = (window as any).ipc
     if (ipc) {
       ipc.send('open-output-folder')
-    }
-  }
-
-  const openWhisperInstructions = () => {
-    const ipc = (window as any).ipc
-    if (ipc) {
-      ipc.send('open-external', 'https://github.com/openai/whisper#setup')
-    }
-  }
-
-  const openCudaSetupGuide = () => {
-    const ipc = (window as any).ipc
-    if (ipc) {
-      ipc.send('open-external', 'https://pytorch.org/get-started/locally/')
     }
   }
 
@@ -430,55 +415,6 @@ export default function HomePage() {
                     </div>
                     <span className="bg-gradient-to-r from-purple-400 to-pink-400 bg-clip-text text-transparent">Settings</span>
                   </h2>
-                  
-                  {/* Whisper Status - Compact */}
-                  <div className="flex items-center gap-2">
-                    {isChecking ? (
-                      <div className="flex items-center gap-1.5 px-3 py-1.5 bg-blue-600/60 border-2 border-blue-400 rounded-md shadow-lg shadow-blue-500/50">
-                        <div className="animate-spin rounded-full h-3 w-3 border-b-2 border-white"></div>
-                        <span className="text-white text-xs font-bold">Checking Whisper...</span>
-                      </div>
-                    ) : whisperInstalled ? (
-                      <div className="flex items-center gap-1.5 px-3 py-1.5 bg-green-600/70 border-2 border-green-400/60 rounded-md shadow-lg shadow-green-500/30">
-                        <svg className="w-3.5 h-3.5 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={3}>
-                          <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
-                        </svg>
-                        <span className="text-white text-xs font-bold">Whisper Installed</span>
-                      </div>
-                    ) : (
-                      <div className="flex items-center gap-1.5">
-                        <div className="flex items-center gap-1.5 px-3 py-1.5 bg-red-600/70 border-2 border-red-400/60 rounded-md shadow-lg shadow-red-500/30">
-                          <svg className="w-3.5 h-3.5 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={3}>
-                            <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
-                          </svg>
-                          <span className="text-white text-xs font-bold">Whisper Not Installed</span>
-                        </div>
-                        <button
-                          onClick={openWhisperInstructions}
-                          className="flex items-center gap-1.5 px-3 py-1.5 bg-gradient-to-r from-indigo-600/80 to-purple-600/80 hover:from-indigo-600 hover:to-purple-600 text-white rounded-md transition-all text-xs font-bold border-2 border-indigo-400/60 shadow-lg shadow-indigo-500/30 hover:shadow-indigo-500/40"
-                          title="Open installation guide"
-                        >
-                          <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
-                            <path strokeLinecap="round" strokeLinejoin="round" d="M12 6.253v13m0-13C10.832 5.477 9.246 5 7.5 5S4.168 5.477 3 6.253v13C4.168 18.477 5.754 18 7.5 18s3.332.477 4.5 1.253m0-13C13.168 5.477 14.754 5 16.5 5c1.747 0 3.332.477 4.5 1.253v13C19.832 18.477 18.247 18 16.5 18c-1.746 0-3.332.477-4.5 1.253" />
-                          </svg>
-                          <span>Setup Guide</span>
-                          <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
-                            <path strokeLinecap="round" strokeLinejoin="round" d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" />
-                          </svg>
-                        </button>
-                      </div>
-                    )}
-                    <button
-                      onClick={checkWhisperInstallation}
-                      disabled={isChecking}
-                      className="px-3 py-1.5 bg-blue-600/70 hover:bg-blue-600/90 disabled:bg-gray-600/50 disabled:cursor-not-allowed text-white rounded-md transition-colors text-xs font-bold border border-blue-400/50 hover:border-blue-400 shadow-sm"
-                      title="Recheck Whisper Installation"
-                    >
-                      <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
-                        <path strokeLinecap="round" strokeLinejoin="round" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
-                      </svg>
-                    </button>
-                  </div>
                 </div>
 
                     <div className="grid grid-cols-1 md:grid-cols-3 gap-3 mb-4">
@@ -543,46 +479,21 @@ export default function HomePage() {
                       </div>
                     </div>
 
-                    {/* CUDA Checkbox */}
+                    {/* Device Selection */}
                     <div className="mb-4">
-                      <label className="flex items-center gap-2 cursor-pointer group">
-                        <input
-                          type="checkbox"
-                          checked={useCuda}
-                          onChange={(e) => setUseCuda(e.target.checked)}
-                          disabled={isProcessing}
-                          className="w-4 h-4 rounded border-gray-600 bg-gray-700 text-green-600 focus:ring-2 focus:ring-green-500/20 focus:ring-offset-0 disabled:opacity-50 disabled:cursor-not-allowed cursor-pointer"
-                        />
-                        <div className="flex items-center gap-2">
-                          <svg className="w-4 h-4 text-green-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z" />
-                          </svg>
-                          <span className="text-sm text-gray-300 group-hover:text-white transition-colors">
-                            Use CUDA GPU Acceleration
-                          </span>
-                          <span className="text-xs text-amber-400 font-medium px-2 py-0.5 bg-amber-500/10 border border-amber-500/20 rounded">
-                            NVIDIA GPU Recommended
-                          </span>
-                        </div>
+                      <label className="flex items-center gap-1.5 text-xs font-medium text-gray-400 mb-2">
+                        <svg className="w-3.5 h-3.5 text-green-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z" />
+                        </svg>
+                        <span>Compute Device</span>
                       </label>
-                      <div className="flex items-center gap-2 mt-1 ml-6">
-                        <p className="text-xs text-gray-500">
-                          Requires CUDA-enabled PyTorch installation
-                        </p>
-                        <button
-                          onClick={openCudaSetupGuide}
-                          className="inline-flex items-center gap-1 px-2 py-0.5 bg-indigo-600/20 hover:bg-indigo-600/30 border border-indigo-500/30 hover:border-indigo-500/50 rounded text-xs text-indigo-400 hover:text-indigo-300 transition-all"
-                          title="Open CUDA setup guide"
-                        >
-                          <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
-                            <path strokeLinecap="round" strokeLinejoin="round" d="M12 6.253v13m0-13C10.832 5.477 9.246 5 7.5 5S4.168 5.477 3 6.253v13C4.168 18.477 5.754 18 7.5 18s3.332.477 4.5 1.253m0-13C13.168 5.477 14.754 5 16.5 5c1.747 0 3.332.477 4.5 1.253v13C19.832 18.477 18.247 18 16.5 18c-1.746 0-3.332.477-4.5 1.253" />
-                          </svg>
-                          <span>Setup Guide</span>
-                          <svg className="w-2.5 h-2.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={3}>
-                            <path strokeLinecap="round" strokeLinejoin="round" d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" />
-                          </svg>
-                        </button>
-                      </div>
+                       <DeviceSelector
+                        value={selectedDevice}
+                        onChange={setSelectedDevice}
+                        disabled={isProcessing}
+                        gpuStatus={gpuStatus}
+                        onNavigateToSetup={() => (window as any).ipc?.send('navigate-to', 'setup')}
+                      />
                     </div>
 
                     <div className="flex gap-2">
@@ -637,16 +548,6 @@ export default function HomePage() {
                                 Pause
                               </button>
                             )}
-                            <button
-                              onClick={openOutputFolder}
-                              className="px-4 py-2 bg-gradient-to-r from-emerald-600/80 to-green-600/80 hover:from-emerald-600 hover:to-green-600 text-white font-bold rounded-lg transition-all shadow-lg shadow-green-900/20 hover:shadow-green-900/30 flex items-center gap-2 text-sm"
-                              title="Open output folder"
-                            >
-                              <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 7v10a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-6l-2-2H5a2 2 0 00-2 2z" />
-                              </svg>
-                              <span>Outputs</span>
-                            </button>
                           </div>
                         </div>
                       </div>
@@ -703,7 +604,14 @@ export default function HomePage() {
                                     <div className="mt-2">
                                       <div className="flex items-center justify-between mb-1">
                                         <span className="text-xs font-medium text-blue-400">Processing...</span>
-                                        <span className="text-xs font-bold text-blue-400">{item.progress}%</span>
+                                        <div className="flex items-center gap-2">
+                                          {item.eta && (
+                                            <span className="text-xs text-gray-400">
+                                              ETA <span className="font-mono text-cyan-400">{item.eta}</span>
+                                            </span>
+                                          )}
+                                          <span className="text-xs font-bold text-blue-400">{item.progress}%</span>
+                                        </div>
                                       </div>
                                       <div className="w-full bg-gray-700/50 rounded-full h-2 overflow-hidden shadow-inner">
                                         <div
@@ -717,7 +625,24 @@ export default function HomePage() {
                                     <div className="mt-2 p-2 bg-orange-900/20 border border-orange-500/30 rounded text-xs text-orange-400">{item.error}</div>
                                   )}
                                   {item.status === 'error' && item.error && (
-                                    <div className="mt-2 p-2 bg-red-900/20 border border-red-500/30 rounded text-xs text-red-400">{item.error}</div>
+                                    <div className="mt-2 space-y-1">
+                                      <div className="p-2 bg-red-900/20 border border-red-500/30 rounded text-xs text-red-400 break-words">{item.error}</div>
+                                      {/cuda|CUDA|torch\.cuda|deserializ/i.test(item.error) && (
+                                        <div className="p-2 bg-amber-900/20 border border-amber-500/30 rounded text-xs text-amber-400">
+                                          CUDA is not available on this system. Switch the Compute Device to <span className="font-semibold">CPU</span> in Settings.
+                                        </div>
+                                      )}
+                                      {/rocm|ROCm|hip/i.test(item.error) && (
+                                        <div className="p-2 bg-amber-900/20 border border-amber-500/30 rounded text-xs text-amber-400">
+                                          ROCm is not available or not installed. Requires ROCm-enabled PyTorch on Linux. Switch the Compute Device to <span className="font-semibold">CPU</span> in Settings.
+                                        </div>
+                                      )}
+                                      {/torch.directml|directml|DirectML/i.test(item.error) && (
+                                        <div className="p-2 bg-amber-900/20 border border-amber-500/30 rounded text-xs text-amber-400">
+                                          torch-directml is not installed. Run: <span className="font-mono">pip install torch-directml</span>
+                                        </div>
+                                      )}
+                                    </div>
                                   )}
                                 </div>
                                 {item.status === 'pending' && !isProcessing && (
@@ -851,5 +776,130 @@ export default function HomePage() {
         </div>
       </div>
     </React.Fragment>
+  )
+}
+
+// ---------------------------------------------------------------------------
+// DeviceSelector — shows available / unavailable compute options as cards
+// ---------------------------------------------------------------------------
+interface DeviceSelectorProps {
+  value: string
+  onChange: (v: string) => void
+  disabled: boolean
+  gpuStatus: GpuStatus | null
+  onNavigateToSetup: () => void
+}
+
+function DeviceSelector({ value, onChange, disabled, gpuStatus, onNavigateToSetup }: DeviceSelectorProps) {
+  const platform = gpuStatus?.platform ?? 'win32'
+
+  const options = [
+    {
+      value: 'auto',
+      label: 'Auto',
+      sub: 'CUDA → DirectML → CPU',
+      available: true,
+      installable: false,
+      platformOk: true,
+    },
+    {
+      value: 'cpu',
+      label: 'CPU',
+      sub: 'Always works, slowest',
+      available: true,
+      installable: false,
+      platformOk: true,
+    },
+    {
+      value: 'cuda',
+      label: 'NVIDIA CUDA',
+      sub: 'Best performance',
+      available: gpuStatus?.cuda ?? false,
+      installable: true,  // can install via Setup page
+      platformOk: true,
+    },
+    {
+      value: 'directml',
+      label: 'AMD / Intel',
+      sub: 'DirectML · Windows',
+      available: gpuStatus?.directml ?? false,
+      installable: true,  // can install via Setup page
+      platformOk: platform === 'win32',
+    },
+    {
+      value: 'rocm',
+      label: 'AMD ROCm',
+      sub: 'Linux only · manual install',
+      available: gpuStatus?.rocm ?? false,
+      installable: false, // requires manual Linux setup
+      platformOk: platform === 'linux',
+    },
+  ]
+
+  return (
+    <div className="grid grid-cols-1 gap-1.5">
+      {options.map(opt => {
+        const selectable = opt.available && !disabled && opt.platformOk
+        const selected = value === opt.value
+        const loading = gpuStatus === null && opt.value !== 'auto' && opt.value !== 'cpu'
+
+        return (
+          <div
+            key={opt.value}
+            role="radio"
+            aria-checked={selected}
+            tabIndex={selectable ? 0 : -1}
+            onClick={() => selectable && onChange(opt.value)}
+            onKeyDown={e => (e.key === 'Enter' || e.key === ' ') && selectable && onChange(opt.value)}
+            className={`w-full flex items-center justify-between px-3 py-2 rounded-lg border text-left transition-all select-none
+              ${selected
+                ? 'bg-green-900/30 border-green-500/60 shadow-sm shadow-green-900/20'
+                : selectable
+                ? 'bg-gray-900/50 border-gray-700/50 hover:border-gray-500/70 hover:bg-gray-800/50 cursor-pointer'
+                : opt.installable && opt.platformOk
+                ? 'bg-gray-900/40 border-gray-700/40'
+                : 'bg-gray-900/20 border-gray-800/40 opacity-40'
+              }`}
+          >
+            {/* left: radio dot + labels */}
+            <div className="flex items-center gap-2.5 min-w-0">
+              <div className={`w-3 h-3 rounded-full border-2 flex-shrink-0 transition-colors ${
+                selected ? 'border-green-400 bg-green-400' : 'border-gray-600'
+              }`} />
+              <div className="min-w-0">
+                <span className={`text-sm font-medium block ${selected ? 'text-white' : 'text-gray-300'}`}>
+                  {opt.label}
+                </span>
+                <span className="text-xs text-gray-500 block">{opt.sub}</span>
+              </div>
+            </div>
+
+            {/* right: status / install button */}
+            <div className="flex items-center gap-2 flex-shrink-0 ml-2">
+              {loading ? (
+                <span className="text-xs text-gray-600 font-mono">...</span>
+              ) : opt.value === 'auto' || opt.value === 'cpu' ? null
+              : !opt.platformOk ? (
+                <span className="text-xs text-gray-600">wrong OS</span>
+              ) : opt.available ? (
+                <span className="text-xs text-green-500 font-medium">installed</span>
+              ) : opt.installable ? (
+                <button
+                  onClick={e => { e.preventDefault(); e.stopPropagation(); onNavigateToSetup() }}
+                  className="inline-flex items-center gap-1 text-xs px-2.5 py-1 bg-blue-600/70 hover:bg-blue-500/70 text-white rounded-md transition-colors font-medium"
+                >
+                  <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
+                  </svg>
+                  Install
+                </button>
+              ) : (
+                <span className="text-xs text-gray-600">not installed</span>
+              )}
+            </div>
+          </div>
+        )
+      })}
+    </div>
   )
 }
