@@ -140,10 +140,15 @@ export default function HomePage() {
         updateQueueItem(data.id, { status: 'cancelled', error: 'Cancelled by user' })
       }
 
+      const handleFilesSelected = (filePaths: string[]) => {
+        addFilesToQueue(filePaths)
+      }
+
       ipc.on('transcription-progress', handleProgress)
       ipc.on('transcription-complete', handleComplete)
       ipc.on('transcription-error', handleError)
       ipc.on('transcription-cancelled', handleCancelled)
+      ipc.on('audio-files-selected', handleFilesSelected)
 
       // Cleanup function to remove listeners
       return () => {
@@ -151,6 +156,7 @@ export default function HomePage() {
         ipc.removeListener('transcription-complete', handleComplete)
         ipc.removeListener('transcription-error', handleError)
         ipc.removeListener('transcription-cancelled', handleCancelled)
+        ipc.removeListener('audio-files-selected', handleFilesSelected)
       }
     }
   }, [])
@@ -159,9 +165,6 @@ export default function HomePage() {
       const ipc = (window as any).ipc
       if (ipc) {
         ipc.send('select-audio-files')
-        ipc.on('audio-files-selected', (filePaths: string[]) => {
-          addFilesToQueue(filePaths)
-        })
       }
     } catch (error) {
       console.error('Error selecting files:', error)
