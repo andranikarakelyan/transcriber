@@ -73,17 +73,7 @@ const getScriptPath = (): string => {
 
 // Get the output directory for transcriptions
 const getOutputDirectory = (): string => {
-  const platform = os.platform()
-  let baseDir: string
-  
-  if (platform === 'win32') {
-    baseDir = path.join(os.homedir(), 'Downloads')
-  } else if (platform === 'darwin') {
-    baseDir = path.join(os.homedir(), 'Downloads')
-  } else {
-    baseDir = path.join(os.homedir(), 'Downloads')
-  }
-  
+  const baseDir = path.join(os.homedir(), 'Downloads')
   const outputDir = path.join(baseDir, 'Transcriber')
   
   if (!fs.existsSync(outputDir)) {
@@ -161,34 +151,12 @@ const killCurrentProcess = () => {
 
 // Create application menu
 const createMenu = () => {
-  const isMac = process.platform === 'darwin'
-  
   const template: Electron.MenuItemConstructorOptions[] = [
-    // App menu (macOS only)
-    ...(isMac ? [{
-      label: app.name,
-      submenu: [
-        { 
-          label: `About ${app.name}`,
-          click: async () => {
-            await shell.openExternal('https://github.com/andranikarakelyan/transcriber')
-          }
-        },
-        { type: 'separator' as const },
-        { role: 'services' as const },
-        { type: 'separator' as const },
-        { role: 'hide' as const },
-        { role: 'hideOthers' as const },
-        { role: 'unhide' as const },
-        { type: 'separator' as const },
-        { role: 'quit' as const }
-      ]
-    }] : []),
     // File menu
     {
       label: 'File',
       submenu: [
-        isMac ? { role: 'close' as const } : { role: 'quit' as const }
+        { role: 'quit' as const }
       ]
     },
     // Edit menu
@@ -201,15 +169,9 @@ const createMenu = () => {
         { role: 'cut' as const },
         { role: 'copy' as const },
         { role: 'paste' as const },
-        ...(isMac ? [
-          { role: 'pasteAndMatchStyle' as const },
-          { role: 'delete' as const },
-          { role: 'selectAll' as const }
-        ] : [
-          { role: 'delete' as const },
-          { type: 'separator' as const },
-          { role: 'selectAll' as const }
-        ])
+        { role: 'delete' as const },
+        { type: 'separator' as const },
+        { role: 'selectAll' as const }
       ]
     },
     // View menu
@@ -233,14 +195,7 @@ const createMenu = () => {
       submenu: [
         { role: 'minimize' as const },
         { role: 'zoom' as const },
-        ...(isMac ? [
-          { type: 'separator' as const },
-          { role: 'front' as const },
-          { type: 'separator' as const },
-          { role: 'window' as const }
-        ] : [
-          { role: 'close' as const }
-        ])
+        { role: 'close' as const }
       ]
     },
     // Help menu
@@ -288,12 +243,12 @@ const createMenu = () => {
           ]
         },
         { type: 'separator' as const },
-        ...(isMac ? [] : [{
+        {
           label: `About ${app.name}`,
           click: async () => {
             await shell.openExternal('https://github.com/andranikarakelyan/transcriber')
           }
-        }])
+        }
       ]
     }
   ]
@@ -498,11 +453,8 @@ ipcMain.on('transcribe-audio', (event, data: { id: string; filePath: string; mod
       args.push('--language', language)
     }
 
-    // ROCm uses the same 'cuda' device string in PyTorch (Linux only).
-    // DirectML and cpu pass through unchanged.
-    const pyDevice = device === 'rocm' ? 'cuda' : device
-    if (pyDevice && pyDevice !== 'auto') {
-      args.push('--device', pyDevice)
+    if (device && device !== 'auto') {
+      args.push('--device', device)
     }
 
     const pyExe = getBundledPython()
@@ -727,11 +679,10 @@ ipcMain.on('check-gpu-status', async (event) => {
 
   const checkLines = [
     'import sys, json',
-    'r = {"cuda": False, "rocm": False, "directml": False, "platform": sys.platform}',
+    'r = {"cuda": False, "directml": False}',
     'try:',
     '    import torch',
     '    r["cuda"] = torch.cuda.is_available()',
-    '    r["rocm"] = bool(getattr(torch.version, "hip", None))',
     'except Exception:',
     '    pass',
     'try:',
@@ -742,7 +693,7 @@ ipcMain.on('check-gpu-status', async (event) => {
     'print(json.dumps(r))',
   ]
 
-  let status = { cuda: false, rocm: false, directml: false, platform: process.platform as string }
+  let status = { cuda: false, directml: false }
 
   try {
     const py = getBundledPython()

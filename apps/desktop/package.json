@@ -14,8 +14,6 @@
     "setup:python:force": "node ../../scripts/setup-python-env.js --force",
     "build:win64": "node ../../scripts/setup-python-env.js && nextron build --win --x64",
     "build:win64:fresh": "node ../../scripts/setup-python-env.js --force && nextron build --win --x64",
-    "build:mac": "echo '⚠️  WARNING: macOS build is not tested yet!' && nextron build --mac",
-    "build:linux": "echo '⚠️  WARNING: Linux build is not tested yet!' && nextron build --linux",
     "postinstall": "electron-builder install-app-deps"
   },
   "dependencies": {

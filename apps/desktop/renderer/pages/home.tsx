@@ -13,15 +13,13 @@ interface QueueItem {
   outputPath?: string
   startedAt?: number   // Date.now() when processing began
   elapsedMs?: number   // final elapsed ms, frozen once task ends
-  actualDevice?: string // resolved device: cpu | cuda | directml | rocm
+  actualDevice?: string // resolved device: cpu | cuda | directml
   willOverwrite?: boolean // output file already exists and will be replaced
 }
 
 interface GpuStatus {
   cuda: boolean
-  rocm: boolean
   directml: boolean
-  platform: string   // 'win32' | 'linux' | 'darwin'
 }
 
 const WHISPER_MODELS = ['tiny', 'base', 'small', 'medium', 'large']
@@ -102,7 +100,7 @@ export default function HomePage() {
       setSelectedDevice(prev => {
         if (prev === 'cuda' && !status.cuda) return 'auto'
         if (prev === 'directml' && !status.directml) return 'auto'
-        if (prev === 'rocm' && !status.rocm) return 'auto'
+        if (prev === 'cpu' && !status.cuda && !status.directml) return 'cpu'
         return prev
       })
     })
@@ -500,7 +498,6 @@ export default function HomePage() {
 
   const DEVICE_BADGE: Record<string, { label: string; classes: string }> = {
     cuda:     { label: 'CUDA',     classes: 'bg-green-500/15 border-green-500/30 text-green-400' },
-    rocm:     { label: 'ROCm',     classes: 'bg-emerald-500/15 border-emerald-500/30 text-emerald-400' },
     directml: { label: 'DirectML', classes: 'bg-purple-500/15 border-purple-500/30 text-purple-400' },
     cpu:      { label: 'CPU',      classes: 'bg-gray-600/30 border-gray-500/30 text-gray-400' },
   }
@@ -817,11 +814,6 @@ export default function HomePage() {
                                           CUDA is not available on this system. Switch the Compute Device to <span className="font-semibold">CPU</span> in Settings.
                                         </div>
                                       )}
-                                      {/rocm|ROCm|hip/i.test(item.error) && (
-                                        <div className="p-2 bg-amber-900/20 border border-amber-500/30 rounded text-xs text-amber-400">
-                                          ROCm is not available or not installed. Requires ROCm-enabled PyTorch on Linux. Switch the Compute Device to <span className="font-semibold">CPU</span> in Settings.
-                                        </div>
-                                      )}
                                       {/torch.directml|directml|DirectML/i.test(item.error) && (
                                         <div className="p-2 bg-amber-900/20 border border-amber-500/30 rounded text-xs text-amber-400">
                                           torch-directml is not installed. Run: <span className="font-mono">pip install torch-directml</span>
@@ -1075,8 +1067,6 @@ interface DeviceSelectorProps {
 }
 
 function DeviceSelector({ value, onChange, disabled, gpuStatus, onInstall, installing }: DeviceSelectorProps) {
-  const platform = gpuStatus?.platform ?? 'win32'
-
   const options = [
     {
       value: 'auto',
@@ -1108,15 +1098,7 @@ function DeviceSelector({ value, onChange, disabled, gpuStatus, onInstall, insta
       sub: 'AMD / Intel · Win',
       available: gpuStatus?.directml ?? false,
       installTarget: 'directml' as const,
-      platformOk: platform === 'win32',
-    },
-    {
-      value: 'rocm',
-      label: 'AMD ROCm',
-      sub: 'Linux · manual',
-      available: gpuStatus?.rocm ?? false,
-      installTarget: null as null | 'directml' | 'cuda',
-      platformOk: platform === 'linux',
+      platformOk: true,
     },
   ]
 

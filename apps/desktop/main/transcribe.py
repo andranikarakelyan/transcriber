@@ -57,7 +57,7 @@ def main():
     parser.add_argument("--language", default=None,
                         help="Language code (e.g. en, fr) or omit for auto-detect")
     parser.add_argument("--device", default=None,
-                        help="Device: cpu or cuda (cuda also covers AMD ROCm)")
+                        help="Device: cpu, cuda, or directml")
     args = parser.parse_args()
 
     # --- Import whisper ---
@@ -106,7 +106,7 @@ def main():
                 print(f"STATUS_DEVICE:cpu", flush=True)
 
     else:
-        resolved_device = args.device  # cuda / cpu / rocm (rocm mapped to cuda by Node)
+        resolved_device = args.device  # cuda / cpu / directml
 
     # --- Load model ---
     print_status("loading_model")

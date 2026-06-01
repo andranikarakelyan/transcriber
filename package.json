@@ -3,9 +3,7 @@
   "name": "transcriber",
   "scripts": {
     "dev": "pnpm --filter transcriber-desktop dev",
-    "build:win64": "pnpm --filter transcriber-desktop build:win64",
-    "build:mac": "pnpm --filter transcriber-desktop build:mac",
-    "build:linux": "pnpm --filter transcriber-desktop build:linux"
+    "build:win64": "pnpm --filter transcriber-desktop build:win64"
   },
   "packageManager": "pnpm@10.11.0"
 }
