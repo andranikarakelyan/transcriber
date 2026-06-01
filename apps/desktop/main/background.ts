@@ -342,8 +342,8 @@ const checkWhisperAvailable = async (): Promise<boolean> => {
   createMenu()
 
   mainWindow = createWindow('main', {
-    width: 1400,
-    height: 900,
+    width: 1280,
+    height: 700,
     show: false,
     backgroundColor: '#111827',
     webPreferences: {

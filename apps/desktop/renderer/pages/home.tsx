@@ -506,16 +506,16 @@ export default function HomePage() {
         <title>Transcriber Desktop</title>
       </Head>
       <div className="min-h-screen bg-gradient-to-br from-gray-950 via-gray-900 to-gray-950 text-white">
-        <div className="container mx-auto px-4 sm:px-6 lg:px-8 py-6 max-w-[1600px]">
+        <div className="container mx-auto px-4 py-3 max-w-[1600px]">
           {/* Main Grid Layout */}
-          <div className="space-y-6">
+          <div className="space-y-3">
             {/* Top Row - Settings and Queue */}
-            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-3">
               {/* Left Column - Settings & Controls */}
               <div className="space-y-6">
               {/* Settings & Controls */}
-              <div className="bg-gradient-to-br from-gray-800/60 to-gray-800/40 backdrop-blur-sm rounded-xl border border-gray-700/50 p-5 shadow-xl">
-                <div className="flex items-start justify-between mb-4">
+              <div className="bg-gradient-to-br from-gray-800/60 to-gray-800/40 backdrop-blur-sm rounded-xl border border-gray-700/50 p-3 shadow-xl">
+                <div className="flex items-start justify-between mb-2">
                   <h2 className="text-lg font-semibold flex items-center gap-2">
                     <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-purple-500/20 to-pink-500/20 flex items-center justify-center">
                       <svg className="w-4 h-4 text-purple-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -526,7 +526,7 @@ export default function HomePage() {
                   </h2>
                 </div>
 
-                    <div className="grid grid-cols-1 md:grid-cols-3 gap-3 mb-4">
+                    <div className="grid grid-cols-1 md:grid-cols-3 gap-2 mb-3">
                       {/* Model Selection */}
                       <div>
                         <label className="flex items-center gap-1.5 text-xs font-medium text-gray-400 mb-1.5">
@@ -595,7 +595,7 @@ export default function HomePage() {
                     </div>
 
                     {/* Device Selection */}
-                    <div className="mb-4">
+                    <div className="mb-2">
                       <label className="flex items-center gap-1.5 text-xs font-medium text-gray-400 mb-2">
                         <svg className="w-3.5 h-3.5 text-green-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z" />
@@ -626,8 +626,8 @@ export default function HomePage() {
 
                     {/* Queue Controls */}
                     {queue.length > 0 && (
-                      <div className="mt-4 bg-gray-700/60 rounded-lg p-3 border-2 border-gray-600">
-                        <div className="flex flex-col gap-3">
+                      <div className="mt-2 bg-gray-700/60 rounded-lg p-2.5 border-2 border-gray-600">
+                        <div className="flex flex-col gap-2">
                           <div className="flex items-center gap-2 text-xs flex-wrap">
                             <span className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-yellow-600/60 border-2 border-yellow-400/50 rounded-md shadow-lg shadow-yellow-500/25">
                               <span className="w-2 h-2 rounded-full bg-yellow-200 animate-pulse"></span>
@@ -673,8 +673,8 @@ export default function HomePage() {
               {/* Right Column - Queue */}
               <div className="space-y-6">
                   {/* Queue */}
-                  <div className="bg-gradient-to-br from-gray-800/60 to-gray-800/40 backdrop-blur-sm rounded-xl border border-gray-700/50 p-5 shadow-xl">
-                    <div className="flex items-center justify-between mb-4">
+                  <div className="bg-gradient-to-br from-gray-800/60 to-gray-800/40 backdrop-blur-sm rounded-xl border border-gray-700/50 p-3 shadow-xl">
+                    <div className="flex items-center justify-between mb-2">
                       <h2 className="text-lg font-semibold flex items-center gap-2">
                         <div className="w-8 h-8 rounded-lg bg-blue-600/60 border border-blue-400 flex items-center justify-center">
                           <svg className="w-4 h-4 text-blue-200" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
@@ -708,7 +708,7 @@ export default function HomePage() {
                       </div>
                     ) : (
                       <>
-                        <div className="bg-gray-900/50 rounded-lg border border-gray-700/50 divide-y divide-gray-700/50 max-h-96 overflow-y-auto shadow-inner">
+                        <div className="bg-gray-900/50 rounded-lg border border-gray-700/50 divide-y divide-gray-700/50 max-h-52 overflow-y-auto shadow-inner">
                           {queue.map((item) => (
                             <div key={item.id} className={`p-3 transition-all duration-300 ${getStatusBg(item.status)}`}>
                               <div className="flex items-start gap-3">
@@ -845,7 +845,7 @@ export default function HomePage() {
 
             {/* Footer - Contact & Support */}
             <div className="w-full">
-              <div className="bg-gradient-to-br from-gray-800/40 to-gray-800/30 backdrop-blur-sm rounded-xl border border-gray-700/50 p-4 shadow-xl">
+              <div className="bg-gradient-to-br from-gray-800/40 to-gray-800/30 backdrop-blur-sm rounded-xl border border-gray-700/50 p-3 shadow-xl">
                 <div className="flex flex-col sm:flex-row items-center justify-between gap-4">
                   <div className="flex items-center gap-3">
                     <div className="w-10 h-10 rounded-lg bg-gradient-to-br from-indigo-500/20 to-purple-500/20 flex items-center justify-center border border-indigo-500/30">

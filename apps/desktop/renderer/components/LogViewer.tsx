@@ -88,8 +88,8 @@ export default function LogViewer() {
   }
 
   return (
-    <div className="bg-gray-800/50 backdrop-blur-sm rounded-xl border border-gray-700 p-5 flex flex-col">
-      <div className="flex justify-between items-center mb-3">
+    <div className="bg-gray-800/50 backdrop-blur-sm rounded-xl border border-gray-700 p-3 flex flex-col">
+      <div className="flex justify-between items-center mb-2">
         <button
           onClick={() => setIsExpanded(!isExpanded)}
           className="flex items-center gap-2 hover:opacity-80 transition-opacity"
@@ -151,7 +151,7 @@ export default function LogViewer() {
         )}
       </div>
       {isExpanded && (
-        <div className="h-[400px] min-h-0 overflow-y-auto bg-gray-900/70 rounded-lg p-4 border border-gray-700 animate-in slide-in-from-top-2 duration-200">
+        <div className="h-[220px] min-h-0 overflow-y-auto bg-gray-900/70 rounded-lg p-3 border border-gray-700 animate-in slide-in-from-top-2 duration-200">
         {logs.length === 0 ? (
           <div className="flex flex-col items-center justify-center h-full text-gray-500">
             <svg className="w-12 h-12 mb-3 opacity-50" fill="none" viewBox="0 0 24 24" stroke="currentColor">
