@@ -9,7 +9,7 @@ A desktop application for local audio transcription using OpenAI's Whisper CLI.
 
 Transcriber is an Electron-based desktop app that provides an easy-to-use interface for transcribing audio files using Whisper CLI. All processing happens locally on your machine, ensuring complete privacy and offline capability.
 
-Download the latest version [here](https://github.com/andranikarakelyan/transcriber/releases/tag/v1.1.0) | [Changelog](CHANGELOG.md)
+Download the latest version [here](https://github.com/andranikarakelyan/transcriber/releases/latest) | [Changelog](CHANGELOG.md)
 
 ## Key Features
 
