@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react'
+import React, { useEffect, useMemo, useState } from 'react'
 import Head from 'next/head'
 import LogViewer from '../components/LogViewer'
 
@@ -11,6 +11,8 @@ interface QueueItem {
   eta?: string
   error?: string
   outputPath?: string
+  startedAt?: number   // Date.now() when processing began
+  elapsedMs?: number   // final elapsed ms, frozen once task ends
 }
 
 interface GpuStatus {
@@ -57,6 +59,26 @@ export default function HomePage() {
   const [selectedDevice, setSelectedDevice] = useState('auto')
   const [gpuStatus, setGpuStatus] = useState<GpuStatus | null>(null)
 
+  // Ticks every second while any item is processing, driving the real-time
+  // elapsed timer. Stops automatically when nothing is processing.
+  const [tickNow, setTickNow] = useState(() => Date.now())
+  const hasProcessingItem = useMemo(() => queue.some(i => i.status === 'processing'), [queue])
+  useEffect(() => {
+    if (!hasProcessingItem) return
+    const id = setInterval(() => setTickNow(Date.now()), 1000)
+    return () => clearInterval(id)
+  }, [hasProcessingItem])
+
+  // Format elapsed milliseconds as m:ss or h:mm:ss
+  const formatElapsed = (ms: number): string => {
+    const s = Math.floor(ms / 1000)
+    const h = Math.floor(s / 3600)
+    const m = Math.floor((s % 3600) / 60)
+    const sec = s % 60
+    if (h > 0) return `${h}:${String(m).padStart(2, '0')}:${String(sec).padStart(2, '0')}`
+    return `${m}:${String(sec).padStart(2, '0')}`
+  }
+
   useEffect(() => {
     const ipc = (window as any).ipc
     if (!ipc) return
@@ -82,7 +104,12 @@ export default function HomePage() {
 
       const handleComplete = (data: { id: string; outputPath: string }) => {
         console.log('Transcription complete:', data.id)
-        updateQueueItem(data.id, { status: 'completed', progress: 100, eta: undefined, outputPath: data.outputPath })
+        // Freeze the elapsed time at completion
+        setQueue(prev => prev.map(item => {
+          if (item.id !== data.id) return item
+          const elapsedMs = item.startedAt != null ? Date.now() - item.startedAt : undefined
+          return { ...item, status: 'completed' as const, progress: 100, eta: undefined, outputPath: data.outputPath, elapsedMs }
+        }))
         // Trigger processing next item
         setTimeout(() => {
           setQueue(prevQueue => {
@@ -110,7 +137,12 @@ export default function HomePage() {
 
       const handleError = (data: { id: string; error: string }) => {
         console.log('Transcription error:', data.id, data.error)
-        updateQueueItem(data.id, { status: 'error', error: data.error })
+        // Freeze the elapsed time at failure
+        setQueue(prev => prev.map(item => {
+          if (item.id !== data.id) return item
+          const elapsedMs = item.startedAt != null ? Date.now() - item.startedAt : undefined
+          return { ...item, status: 'error' as const, error: data.error, elapsedMs }
+        }))
         // Trigger processing next item
         setTimeout(() => {
           setQueue(prevQueue => {
@@ -137,7 +169,12 @@ export default function HomePage() {
 
       const handleCancelled = (data: { id: string }) => {
         console.log('Transcription cancelled:', data.id)
-        updateQueueItem(data.id, { status: 'cancelled', error: 'Cancelled by user' })
+        // Freeze the elapsed time at cancellation
+        setQueue(prev => prev.map(item => {
+          if (item.id !== data.id) return item
+          const elapsedMs = item.startedAt != null ? Date.now() - item.startedAt : undefined
+          return { ...item, status: 'cancelled' as const, error: 'Cancelled by user', elapsedMs }
+        }))
       }
 
       const handleFilesSelected = (filePaths: string[]) => {
@@ -264,7 +301,7 @@ export default function HomePage() {
 
         console.log('Processing next item:', nextItem.fileName)
         setIsProcessing(true)
-        updateQueueItem(nextItem.id, { status: 'processing', progress: 0, eta: undefined })
+        updateQueueItem(nextItem.id, { status: 'processing', progress: 0, eta: undefined, startedAt: Date.now() })
 
         const ipc = (window as any).ipc
         if (ipc) {
@@ -603,11 +640,21 @@ export default function HomePage() {
                                 {getStatusIcon(item.status)}
                                 <div className="flex-1 min-w-0">
                                   <p className="text-white font-medium text-sm truncate mb-1" title={item.filePath}>{item.fileName}</p>
+                                  {item.elapsedMs != null && item.status !== 'processing' && (
+                                    <span className="inline-flex items-center gap-1 text-xs text-gray-500 font-mono mb-1">
+                                      ⏱ {formatElapsed(item.elapsedMs)}
+                                    </span>
+                                  )}
                                   {item.status === 'processing' && item.progress !== undefined && (
                                     <div className="mt-2">
                                       <div className="flex items-center justify-between mb-1">
                                         <span className="text-xs font-medium text-blue-400">Processing...</span>
                                         <div className="flex items-center gap-2">
+                                          {item.startedAt != null && (
+                                            <span className="text-xs text-gray-400 font-mono">
+                                              ⏱ {formatElapsed(tickNow - item.startedAt)}
+                                            </span>
+                                          )}
                                           {item.eta && (
                                             <span className="text-xs text-gray-400">
                                               ETA <span className="font-mono text-cyan-400">{item.eta}</span>
