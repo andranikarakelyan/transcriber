@@ -354,22 +354,34 @@ const checkWhisperAvailable = async (): Promise<boolean> => {
   // Maximize the window
   mainWindow.maximize()
 
-  // Show the window only after the renderer has painted its first frame,
-  // preventing the white-screen flash on startup.
+  // Show the window as soon as the loading page paints its first frame.
   mainWindow.once('ready-to-show', () => {
     mainWindow.show()
   })
 
-  // Check whisper BEFORE loading the window so we can open the right page
-  const whisperReady = await checkWhisperAvailable()
-  const startPage = whisperReady ? 'home' : 'setup'
+  // Kick off the whisper check in the background (no await here).
+  // We navigate to the real page once it resolves.
+  const whisperCheckPromise = checkWhisperAvailable()
 
+  // Load the loading page immediately so the user sees the spinner right away.
   if (isProd) {
-    await mainWindow.loadURL(`app://./${startPage}`)
+    await mainWindow.loadURL('app://./loading')
   } else {
     const port = process.argv[2]
-    await mainWindow.loadURL(`http://localhost:${port}/${startPage}`)
+    await mainWindow.loadURL(`http://localhost:${port}/loading`)
     mainWindow.webContents.openDevTools()
+  }
+
+  // Once the whisper check finishes, navigate to the correct page.
+  // (navigateTo is defined below with const, so we inline the logic here to
+  // avoid the temporal dead zone.)
+  const whisperReady = await whisperCheckPromise
+  const startPage = whisperReady ? 'home' : 'setup'
+  if (isProd) {
+    mainWindow.loadURL(`app://./${startPage}`)
+  } else {
+    const port = process.argv[2]
+    mainWindow.loadURL(`http://localhost:${port}/${startPage}`)
   }
 
   sendLog('info', `Application started — opening ${startPage}`)
