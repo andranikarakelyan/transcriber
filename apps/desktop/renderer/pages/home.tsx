@@ -14,6 +14,7 @@ interface QueueItem {
   startedAt?: number   // Date.now() when processing began
   elapsedMs?: number   // final elapsed ms, frozen once task ends
   actualDevice?: string // resolved device: cpu | cuda | directml | rocm
+  willOverwrite?: boolean // output file already exists and will be replaced
 }
 
 interface GpuStatus {
@@ -107,6 +108,10 @@ export default function HomePage() {
         updateQueueItem(data.id, { actualDevice: data.device })
       }
 
+      const handleOutputExistsResult = (data: { id: string; exists: boolean }) => {
+        updateQueueItem(data.id, { willOverwrite: data.exists })
+      }
+
       const handleComplete = (data: { id: string; outputPath: string }) => {
         console.log('Transcription complete:', data.id)
         // Freeze the elapsed time at completion
@@ -188,6 +193,7 @@ export default function HomePage() {
 
       ipc.on('transcription-progress', handleProgress)
       ipc.on('transcription-device', handleDevice)
+      ipc.on('output-exists-result', handleOutputExistsResult)
       ipc.on('transcription-complete', handleComplete)
       ipc.on('transcription-error', handleError)
       ipc.on('transcription-cancelled', handleCancelled)
@@ -197,6 +203,7 @@ export default function HomePage() {
       return () => {
         ipc.removeListener('transcription-progress', handleProgress)
         ipc.removeListener('transcription-device', handleDevice)
+        ipc.removeListener('output-exists-result', handleOutputExistsResult)
         ipc.removeListener('transcription-complete', handleComplete)
         ipc.removeListener('transcription-error', handleError)
         ipc.removeListener('transcription-cancelled', handleCancelled)
@@ -228,6 +235,17 @@ export default function HomePage() {
       }
     })
     setQueue(prev => [...prev, ...newItems])
+    // Check if output files already exist for the new items
+    checkOverwrites(newItems, selectedFormat)
+  }
+
+  // Send existence checks to the main process for a set of items + format.
+  const checkOverwrites = (items: Pick<QueueItem, 'id' | 'filePath'>[], format: string) => {
+    const ipc = (window as any).ipc
+    if (!ipc) return
+    for (const item of items) {
+      ipc.send('check-output-exists', { id: item.id, filePath: item.filePath, format })
+    }
   }
 
   const updateQueueItem = (id: string, updates: Partial<QueueItem>) => {
@@ -444,6 +462,23 @@ export default function HomePage() {
     )
   }
 
+  const OverwriteWarning = () => (
+    <span className="group relative inline-flex items-center flex-shrink-0">
+      <svg
+        className="w-3.5 h-3.5 text-amber-400 cursor-help"
+        fill="none"
+        viewBox="0 0 24 24"
+        stroke="currentColor"
+        strokeWidth={2}
+      >
+        <path strokeLinecap="round" strokeLinejoin="round" d="M12 9v4m0 4h.01M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z" />
+      </svg>
+      <span className="absolute left-0 bottom-full mb-1.5 hidden group-hover:block w-60 p-2 bg-gray-950 border border-amber-500/40 rounded-lg shadow-xl text-xs text-amber-300 z-20 pointer-events-none leading-relaxed">
+        An output file with this name already exists and <span className="font-semibold text-amber-200">will be overwritten</span>.
+      </span>
+    </span>
+  )
+
   const getStatusBg = (status: QueueItem['status']) => {
     switch (status) {
       case 'pending':
@@ -539,7 +574,13 @@ export default function HomePage() {
                         <label className="block text-xs font-medium text-gray-400 mb-1.5">Output Format</label>
                         <select
                           value={selectedFormat}
-                          onChange={(e) => setSelectedFormat(e.target.value)}
+                          onChange={(e) => {
+                            const newFormat = e.target.value
+                            setSelectedFormat(newFormat)
+                            // Recheck all pending items — output path changes with format
+                            const pending = queue.filter(i => i.status === 'pending')
+                            checkOverwrites(pending, newFormat)
+                          }}
                           disabled={isProcessing}
                           className="w-full bg-gray-900/70 border border-gray-700 rounded-lg px-3 py-2 text-sm text-white focus:outline-none focus:border-cyan-500 focus:ring-1 focus:ring-cyan-500/20 disabled:opacity-50 disabled:cursor-not-allowed transition-all"
                         >
@@ -672,7 +713,10 @@ export default function HomePage() {
                               <div className="flex items-start gap-3">
                                 {getStatusIcon(item.status)}
                                 <div className="flex-1 min-w-0">
-                                  <p className="text-white font-medium text-sm truncate mb-1" title={item.filePath}>{item.fileName}</p>
+                                  <div className="flex items-center gap-1.5 mb-1 min-w-0">
+                                    <p className="text-white font-medium text-sm truncate" title={item.filePath}>{item.fileName}</p>
+                                    {item.willOverwrite && <OverwriteWarning />}
+                                  </div>
                                   {item.elapsedMs != null && item.status !== 'processing' && (
                                     <div className="flex items-center gap-2 mb-1">
                                       <span className="inline-flex items-center gap-1 text-xs text-gray-500 font-mono">
@@ -690,12 +734,12 @@ export default function HomePage() {
                                         </div>
                                         <div className="flex items-center gap-2">
                                           {item.startedAt != null && (
-                                            <span className="text-xs text-gray-400 font-mono">
+                                            <span className="inline-block min-w-[3.5rem] text-right text-xs text-gray-400 font-mono">
                                               ⏱ {formatElapsed(tickNow - item.startedAt)}
                                             </span>
                                           )}
                                           {item.eta && (
-                                            <span className="text-xs text-gray-400">
+                                            <span className="inline-block min-w-[5.5rem] text-right text-xs text-gray-400">
                                               ETA <span className="font-mono text-cyan-400">{item.eta}</span>
                                             </span>
                                           )}

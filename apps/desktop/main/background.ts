@@ -655,6 +655,18 @@ ipcMain.on('transcribe-audio', (event, data: { id: string; filePath: string; mod
 })
 
 // ---------------------------------------------------------------------------
+// Check if the expected output file already exists (used to warn before overwrite)
+// ---------------------------------------------------------------------------
+ipcMain.on('check-output-exists', (event, data: { id: string; filePath: string; format: string }) => {
+  const { id, filePath, format } = data
+  const outputDir = path.dirname(filePath)
+  const base = path.basename(filePath, path.extname(filePath))
+  const ext = format === 'all' ? 'srt' : format
+  const outputPath = path.join(outputDir, `${base}.${ext}`)
+  event.reply('output-exists-result', { id, exists: fs.existsSync(outputPath) })
+})
+
+// ---------------------------------------------------------------------------
 // Cancel current transcription
 // ---------------------------------------------------------------------------
 ipcMain.on('cancel-transcription', () => {
