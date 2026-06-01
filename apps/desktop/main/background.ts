@@ -344,6 +344,8 @@ const checkWhisperAvailable = async (): Promise<boolean> => {
   mainWindow = createWindow('main', {
     width: 1400,
     height: 900,
+    show: false,
+    backgroundColor: '#111827',
     webPreferences: {
       preload: path.join(__dirname, 'preload.js'),
     },
@@ -351,6 +353,12 @@ const checkWhisperAvailable = async (): Promise<boolean> => {
 
   // Maximize the window
   mainWindow.maximize()
+
+  // Show the window only after the renderer has painted its first frame,
+  // preventing the white-screen flash on startup.
+  mainWindow.once('ready-to-show', () => {
+    mainWindow.show()
+  })
 
   // Check whisper BEFORE loading the window so we can open the right page
   const whisperReady = await checkWhisperAvailable()
