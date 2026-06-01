@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from 'react'
+import React, { useEffect, useMemo, useRef, useState } from 'react'
 import Head from 'next/head'
 import LogViewer from '../components/LogViewer'
 
@@ -61,6 +61,15 @@ export default function HomePage() {
   const [selectedDevice, setSelectedDevice] = useState('auto')
   const [gpuStatus, setGpuStatus] = useState<GpuStatus | null>(null)
 
+  // GPU package install flow
+  type InstallTarget = 'directml' | 'cuda'
+  type InstallPhase  = 'idle' | 'confirm' | 'running' | 'done' | 'error'
+  const [installTarget, setInstallTarget] = useState<InstallTarget | null>(null)
+  const [installPhase,  setInstallPhase]  = useState<InstallPhase>('idle')
+  const [installLogs,   setInstallLogs]   = useState<string[]>([])
+  const [installError,  setInstallError]  = useState<string | null>(null)
+  const installLogEndRef = useRef<HTMLDivElement>(null)
+
   // Ticks every second while any item is processing, driving the real-time
   // elapsed timer. Stops automatically when nothing is processing.
   const [tickNow, setTickNow] = useState(() => Date.now())
@@ -110,6 +119,20 @@ export default function HomePage() {
 
       const handleOutputExistsResult = (data: { id: string; exists: boolean }) => {
         updateQueueItem(data.id, { willOverwrite: data.exists })
+      }
+
+      const handleInstallLog = (line: string) => {
+        setInstallLogs(prev => [...prev, line])
+      }
+      const handleInstallComplete = () => {
+        setInstallPhase('done')
+        setInstallLogs(prev => [...prev, '✓ Installation complete!'])
+        // Refresh GPU availability badges
+        ipc.send('check-gpu-status')
+      }
+      const handleInstallError = (msg: string) => {
+        setInstallPhase('error')
+        setInstallError(msg)
       }
 
       const handleComplete = (data: { id: string; outputPath: string }) => {
@@ -198,6 +221,9 @@ export default function HomePage() {
       ipc.on('transcription-error', handleError)
       ipc.on('transcription-cancelled', handleCancelled)
       ipc.on('audio-files-selected', handleFilesSelected)
+      ipc.on('install-log', handleInstallLog)
+      ipc.on('install-complete', handleInstallComplete)
+      ipc.on('install-error', handleInstallError)
 
       // Cleanup function to remove listeners
       return () => {
@@ -208,6 +234,9 @@ export default function HomePage() {
         ipc.removeListener('transcription-error', handleError)
         ipc.removeListener('transcription-cancelled', handleCancelled)
         ipc.removeListener('audio-files-selected', handleFilesSelected)
+        ipc.removeListener('install-log', handleInstallLog)
+        ipc.removeListener('install-complete', handleInstallComplete)
+        ipc.removeListener('install-error', handleInstallError)
       }
     }
   }, [])
@@ -399,6 +428,31 @@ export default function HomePage() {
     if (ipc) {
       ipc.send('open-output-folder')
     }
+  }
+
+  // Auto-scroll install log to bottom when new lines arrive
+  useEffect(() => {
+    installLogEndRef.current?.scrollIntoView({ behavior: 'smooth' })
+  }, [installLogs])
+
+  const requestInstall = (target: 'directml' | 'cuda') => {
+    setInstallTarget(target)
+    setInstallLogs([])
+    setInstallError(null)
+    setInstallPhase('confirm')
+  }
+
+  const confirmInstall = () => {
+    setInstallPhase('running')
+    const ipc = (window as any).ipc
+    ipc?.send('start-install', { target: installTarget })
+  }
+
+  const closeInstall = () => {
+    setInstallPhase('idle')
+    setInstallTarget(null)
+    setInstallLogs([])
+    setInstallError(null)
   }
 
   const getStatusIcon = (status: QueueItem['status']) => {
@@ -603,7 +657,8 @@ export default function HomePage() {
                         onChange={setSelectedDevice}
                         disabled={isProcessing}
                         gpuStatus={gpuStatus}
-                        onNavigateToSetup={() => (window as any).ipc?.send('navigate-to', 'setup')}
+                        onInstall={requestInstall}
+                        installing={installPhase === 'running' ? installTarget : null}
                       />
                     </div>
 
@@ -905,39 +960,138 @@ export default function HomePage() {
           </div>
         </div>
       </div>
+
+      {/* ── Confirmation dialog ── */}
+      {installPhase === 'confirm' && installTarget && (
+        <div className="fixed inset-0 bg-black/70 flex items-center justify-center z-50 p-4">
+          <div className="bg-gray-900 border border-gray-700 rounded-xl p-5 w-full max-w-sm shadow-2xl">
+            <div className="flex items-center gap-3 mb-3">
+              <div className="w-9 h-9 rounded-lg bg-blue-600/20 border border-blue-500/30 flex items-center justify-center flex-shrink-0">
+                <svg className="w-4.5 h-4.5 text-blue-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
+                </svg>
+              </div>
+              <h3 className="text-white font-semibold">
+                Install {installTarget === 'cuda' ? 'NVIDIA CUDA' : 'AMD / Intel DirectML'}?
+              </h3>
+            </div>
+            <p className="text-gray-400 text-sm mb-1">
+              {installTarget === 'cuda'
+                ? 'Downloads ~2.5 GB of NVIDIA CUDA torch packages.'
+                : 'Downloads ~400 MB of DirectML torch packages.'}
+            </p>
+            <p className="text-gray-500 text-xs mb-4">
+              Packages are installed into the app's own Python environment, not your system Python.
+            </p>
+            <div className="flex gap-2">
+              <button
+                onClick={closeInstall}
+                className="flex-1 py-2 text-sm font-medium bg-gray-700 hover:bg-gray-600 text-gray-200 rounded-lg transition-colors"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={confirmInstall}
+                className="flex-1 py-2 text-sm font-bold bg-blue-600 hover:bg-blue-500 text-white rounded-lg transition-colors"
+              >
+                Install
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ── Install progress / log popup ── */}
+      {(installPhase === 'running' || installPhase === 'done' || installPhase === 'error') && installTarget && (
+        <div className="fixed inset-0 bg-black/70 flex items-center justify-center z-50 p-4">
+          <div className="bg-gray-900 border border-gray-700 rounded-xl p-5 w-full max-w-lg shadow-2xl flex flex-col gap-3">
+            {/* header */}
+            <div className="flex items-center gap-3">
+              {installPhase === 'running' && (
+                <div className="w-5 h-5 rounded-full border-2 border-blue-500 border-t-transparent animate-spin flex-shrink-0" />
+              )}
+              {installPhase === 'done' && (
+                <svg className="w-5 h-5 text-green-400 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
+                </svg>
+              )}
+              {installPhase === 'error' && (
+                <svg className="w-5 h-5 text-red-400 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
+                </svg>
+              )}
+              <div>
+                <p className="text-white font-semibold text-sm">
+                  {installPhase === 'running' && `Installing ${installTarget === 'cuda' ? 'NVIDIA CUDA' : 'DirectML'}…`}
+                  {installPhase === 'done'    && `Installation complete`}
+                  {installPhase === 'error'   && `Installation failed`}
+                </p>
+                {installPhase === 'running' && (
+                  <p className="text-gray-500 text-xs">Do not close the app during installation.</p>
+                )}
+              </div>
+            </div>
+
+            {/* log area */}
+            <div className="bg-gray-950/80 border border-gray-700/50 rounded-lg p-3 h-64 overflow-y-auto font-mono text-xs space-y-0.5">
+              {installLogs.map((line, i) => (
+                <div key={i} className={
+                  line.startsWith('✓') ? 'text-green-400' :
+                  line.startsWith('✗') ? 'text-red-400' :
+                  line.startsWith('⚠') ? 'text-amber-400' :
+                  line.startsWith('---') ? 'text-blue-400 font-semibold' :
+                  line.startsWith('>') ? 'text-gray-600' :
+                  'text-gray-400'
+                }>{line}</div>
+              ))}
+              <div ref={installLogEndRef} />
+            </div>
+
+            {(installPhase === 'done' || installPhase === 'error') && (
+              <button
+                onClick={closeInstall}
+                className="w-full py-2 text-sm font-medium bg-gray-700 hover:bg-gray-600 text-gray-200 rounded-lg transition-colors"
+              >
+                Close
+              </button>
+            )}
+          </div>
+        </div>
+      )}
     </React.Fragment>
   )
 }
 
 // ---------------------------------------------------------------------------
-// DeviceSelector — shows available / unavailable compute options as cards
+// DeviceSelector — compact 2-column grid of selectable device chips
 // ---------------------------------------------------------------------------
 interface DeviceSelectorProps {
   value: string
   onChange: (v: string) => void
   disabled: boolean
   gpuStatus: GpuStatus | null
-  onNavigateToSetup: () => void
+  onInstall: (target: 'directml' | 'cuda') => void
+  installing: 'directml' | 'cuda' | null
 }
 
-function DeviceSelector({ value, onChange, disabled, gpuStatus, onNavigateToSetup }: DeviceSelectorProps) {
+function DeviceSelector({ value, onChange, disabled, gpuStatus, onInstall, installing }: DeviceSelectorProps) {
   const platform = gpuStatus?.platform ?? 'win32'
 
   const options = [
     {
       value: 'auto',
       label: 'Auto',
-      sub: 'CUDA → DirectML → CPU',
+      sub: 'CUDA → DML → CPU',
       available: true,
-      installable: false,
+      installTarget: null as null | 'directml' | 'cuda',
       platformOk: true,
     },
     {
       value: 'cpu',
       label: 'CPU',
-      sub: 'Always works, slowest',
+      sub: 'Always works',
       available: true,
-      installable: false,
+      installTarget: null as null | 'directml' | 'cuda',
       platformOk: true,
     },
     {
@@ -945,33 +1099,34 @@ function DeviceSelector({ value, onChange, disabled, gpuStatus, onNavigateToSetu
       label: 'NVIDIA CUDA',
       sub: 'Best performance',
       available: gpuStatus?.cuda ?? false,
-      installable: true,  // can install via Setup page
+      installTarget: 'cuda' as const,
       platformOk: true,
     },
     {
       value: 'directml',
-      label: 'AMD / Intel',
-      sub: 'DirectML · Windows',
+      label: 'DirectML',
+      sub: 'AMD / Intel · Win',
       available: gpuStatus?.directml ?? false,
-      installable: true,  // can install via Setup page
+      installTarget: 'directml' as const,
       platformOk: platform === 'win32',
     },
     {
       value: 'rocm',
       label: 'AMD ROCm',
-      sub: 'Linux only · manual install',
+      sub: 'Linux · manual',
       available: gpuStatus?.rocm ?? false,
-      installable: false, // requires manual Linux setup
+      installTarget: null as null | 'directml' | 'cuda',
       platformOk: platform === 'linux',
     },
   ]
 
   return (
-    <div className="grid grid-cols-1 gap-1.5">
+    <div className="grid grid-cols-2 gap-1.5">
       {options.map(opt => {
         const selectable = opt.available && !disabled && opt.platformOk
-        const selected = value === opt.value
-        const loading = gpuStatus === null && opt.value !== 'auto' && opt.value !== 'cpu'
+        const selected   = value === opt.value
+        const loading    = gpuStatus === null && opt.installTarget !== null
+        const isInstalling = installing === opt.installTarget && opt.installTarget !== null
 
         return (
           <div
@@ -981,51 +1136,46 @@ function DeviceSelector({ value, onChange, disabled, gpuStatus, onNavigateToSetu
             tabIndex={selectable ? 0 : -1}
             onClick={() => selectable && onChange(opt.value)}
             onKeyDown={e => (e.key === 'Enter' || e.key === ' ') && selectable && onChange(opt.value)}
-            className={`w-full flex items-center justify-between px-3 py-2 rounded-lg border text-left transition-all select-none
+            className={`flex items-center justify-between px-2.5 py-1.5 rounded-lg border transition-all select-none
               ${selected
                 ? 'bg-green-900/30 border-green-500/60 shadow-sm shadow-green-900/20'
                 : selectable
                 ? 'bg-gray-900/50 border-gray-700/50 hover:border-gray-500/70 hover:bg-gray-800/50 cursor-pointer'
-                : opt.installable && opt.platformOk
+                : opt.installTarget && opt.platformOk
                 ? 'bg-gray-900/40 border-gray-700/40'
                 : 'bg-gray-900/20 border-gray-800/40 opacity-40'
               }`}
           >
-            {/* left: radio dot + labels */}
-            <div className="flex items-center gap-2.5 min-w-0">
-              <div className={`w-3 h-3 rounded-full border-2 flex-shrink-0 transition-colors ${
+            {/* radio dot + label */}
+            <div className="flex items-center gap-2 min-w-0">
+              <div className={`w-2.5 h-2.5 rounded-full border-2 flex-shrink-0 transition-colors ${
                 selected ? 'border-green-400 bg-green-400' : 'border-gray-600'
               }`} />
               <div className="min-w-0">
-                <span className={`text-sm font-medium block ${selected ? 'text-white' : 'text-gray-300'}`}>
+                <span className={`text-xs font-medium block truncate ${selected ? 'text-white' : 'text-gray-300'}`}>
                   {opt.label}
                 </span>
-                <span className="text-xs text-gray-500 block">{opt.sub}</span>
+                <span className="text-[10px] text-gray-500 block leading-tight truncate">{opt.sub}</span>
               </div>
             </div>
 
-            {/* right: status / install button */}
-            <div className="flex items-center gap-2 flex-shrink-0 ml-2">
-              {loading ? (
-                <span className="text-xs text-gray-600 font-mono">...</span>
-              ) : opt.value === 'auto' || opt.value === 'cpu' ? null
-              : !opt.platformOk ? (
-                <span className="text-xs text-gray-600">wrong OS</span>
+            {/* right badge */}
+            <div className="flex-shrink-0 ml-1">
+              {loading || isInstalling ? (
+                <div className="w-3 h-3 rounded-full border-2 border-gray-600 border-t-blue-400 animate-spin" />
+              ) : !opt.platformOk ? (
+                <span className="text-[10px] text-gray-600">wrong OS</span>
               ) : opt.available ? (
-                <span className="text-xs text-green-500 font-medium">installed</span>
-              ) : opt.installable ? (
+                <span className="text-[10px] text-green-500 font-medium">✓</span>
+              ) : opt.installTarget ? (
                 <button
-                  onClick={e => { e.preventDefault(); e.stopPropagation(); onNavigateToSetup() }}
-                  className="inline-flex items-center gap-1 text-xs px-2.5 py-1 bg-blue-600/70 hover:bg-blue-500/70 text-white rounded-md transition-colors font-medium"
+                  onClick={e => { e.preventDefault(); e.stopPropagation(); onInstall(opt.installTarget!) }}
+                  disabled={disabled || installing !== null}
+                  className="text-[10px] px-1.5 py-0.5 bg-blue-600/70 hover:bg-blue-500/70 disabled:bg-gray-700 disabled:text-gray-500 text-white rounded transition-colors font-medium"
                 >
-                  <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
-                    <path strokeLinecap="round" strokeLinejoin="round" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
-                  </svg>
                   Install
                 </button>
-              ) : (
-                <span className="text-xs text-gray-600">not installed</span>
-              )}
+              ) : null}
             </div>
           </div>
         )

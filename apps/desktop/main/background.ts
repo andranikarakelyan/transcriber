@@ -359,32 +359,23 @@ const checkWhisperAvailable = async (): Promise<boolean> => {
     mainWindow.show()
   })
 
-  // Kick off the whisper check in the background (no await here).
-  // We navigate to the real page once it resolves.
-  const whisperCheckPromise = checkWhisperAvailable()
+  // Kick off whisper check for logging only — no longer used for routing.
+  checkWhisperAvailable().then(ready => {
+    if (!ready) sendLog('warn', 'Whisper not available — transcription will fail until installed.')
+  })
 
   // Load the loading page immediately so the user sees the spinner right away.
   if (isProd) {
     await mainWindow.loadURL('app://./loading')
+    mainWindow.loadURL('app://./home')
   } else {
     const port = process.argv[2]
     await mainWindow.loadURL(`http://localhost:${port}/loading`)
     mainWindow.webContents.openDevTools()
+    mainWindow.loadURL(`http://localhost:${port}/home`)
   }
 
-  // Once the whisper check finishes, navigate to the correct page.
-  // (navigateTo is defined below with const, so we inline the logic here to
-  // avoid the temporal dead zone.)
-  const whisperReady = await whisperCheckPromise
-  const startPage = whisperReady ? 'home' : 'setup'
-  if (isProd) {
-    mainWindow.loadURL(`app://./${startPage}`)
-  } else {
-    const port = process.argv[2]
-    mainWindow.loadURL(`http://localhost:${port}/${startPage}`)
-  }
-
-  sendLog('info', `Application started — opening ${startPage}`)
+  sendLog('info', 'Application started — opening home')
 })()
 
 // Navigate main window to a page (used by IPC and menu)
