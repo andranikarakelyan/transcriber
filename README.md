@@ -3,13 +3,13 @@
 A desktop application for local audio transcription using OpenAI's Whisper CLI.
 
 
-<img width="2560" height="1380" alt="Screenshot 2026-01-31 220859" src="https://github.com/user-attachments/assets/d36e6440-dbcb-417c-8683-43cbb9e16039" />
+<img alt="Transcriber v1.1.0 screenshot" src="screenshots/v1.1.0.png" />
 
 ## Overview
 
 Transcriber is an Electron-based desktop app that provides an easy-to-use interface for transcribing audio files using Whisper CLI. All processing happens locally on your machine, ensuring complete privacy and offline capability.
 
-Download the latest version [here](https://github.com/andranikarakelyan/transcriber/releases/tag/v1.0.0)
+Download the latest version [here](https://github.com/andranikarakelyan/transcriber/releases/tag/v1.1.0) | [Changelog](CHANGELOG.md)
 
 ## Key Features
 
@@ -18,15 +18,18 @@ Download the latest version [here](https://github.com/andranikarakelyan/transcri
 - **Multiple Output Formats** - Support for SRT, VTT, TXT, JSON, and TSV
 - **Language Selection** - Choose from 15+ languages or auto-detect
 - **Model Selection** - Pick from tiny to large Whisper models based on your needs
-- **CUDA GPU Acceleration** - Optional GPU support for faster transcription
-- **Real-time Logs** - Monitor transcription progress with detailed logging
+- **GPU Acceleration** - CUDA and DirectML support for faster transcription; installable directly from within the app
+- **Compute Device Badge** - Each task shows which device (CUDA, DirectML, or CPU) is processing it
+- **Real-time Progress** - Live elapsed time per task and detailed transcription logs
+- **Overwrite Warning** - Visual warning on queue items when output file already exists
+- **Fast Startup** - Loading screen on launch instead of a blank window
 - **Privacy-First** - No data leaves your computer
 
 ## Platform Support
 
-**Currently tested for Windows only.** 
+**Windows only.**
 
-Support for macOS and Linux will be added later based on community requests/needs.
+macOS and Linux support has been removed for now to keep the project focused. It may be revisited based on community interest.
 
 ## Quick Start
 
