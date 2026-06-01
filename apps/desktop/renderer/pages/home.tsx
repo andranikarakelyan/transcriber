@@ -473,7 +473,8 @@ export default function HomePage() {
       >
         <path strokeLinecap="round" strokeLinejoin="round" d="M12 9v4m0 4h.01M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z" />
       </svg>
-      <span className="absolute left-0 bottom-full mb-1.5 hidden group-hover:block w-60 p-2 bg-gray-950 border border-amber-500/40 rounded-lg shadow-xl text-xs text-amber-300 z-20 pointer-events-none leading-relaxed">
+      {/* Opens downward so it stays inside the overflow-y:auto scroll container */}
+      <span className="absolute left-0 top-5 hidden group-hover:block w-56 p-2 bg-gray-950 border border-amber-500/40 rounded-lg shadow-xl text-xs text-amber-300 z-30 pointer-events-none leading-relaxed">
         An output file with this name already exists and <span className="font-semibold text-amber-200">will be overwritten</span>.
       </span>
     </span>
