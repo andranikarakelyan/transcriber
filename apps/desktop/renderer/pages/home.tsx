@@ -13,6 +13,7 @@ interface QueueItem {
   outputPath?: string
   startedAt?: number   // Date.now() when processing began
   elapsedMs?: number   // final elapsed ms, frozen once task ends
+  actualDevice?: string // resolved device: cpu | cuda | directml | rocm
 }
 
 interface GpuStatus {
@@ -102,6 +103,10 @@ export default function HomePage() {
         updateQueueItem(data.id, { progress: data.progress, eta: data.eta })
       }
 
+      const handleDevice = (data: { id: string; device: string }) => {
+        updateQueueItem(data.id, { actualDevice: data.device })
+      }
+
       const handleComplete = (data: { id: string; outputPath: string }) => {
         console.log('Transcription complete:', data.id)
         // Freeze the elapsed time at completion
@@ -182,6 +187,7 @@ export default function HomePage() {
       }
 
       ipc.on('transcription-progress', handleProgress)
+      ipc.on('transcription-device', handleDevice)
       ipc.on('transcription-complete', handleComplete)
       ipc.on('transcription-error', handleError)
       ipc.on('transcription-cancelled', handleCancelled)
@@ -190,6 +196,7 @@ export default function HomePage() {
       // Cleanup function to remove listeners
       return () => {
         ipc.removeListener('transcription-progress', handleProgress)
+        ipc.removeListener('transcription-device', handleDevice)
         ipc.removeListener('transcription-complete', handleComplete)
         ipc.removeListener('transcription-error', handleError)
         ipc.removeListener('transcription-cancelled', handleCancelled)
@@ -301,7 +308,15 @@ export default function HomePage() {
 
         console.log('Processing next item:', nextItem.fileName)
         setIsProcessing(true)
-        updateQueueItem(nextItem.id, { status: 'processing', progress: 0, eta: undefined, startedAt: Date.now() })
+        updateQueueItem(nextItem.id, {
+          status: 'processing',
+          progress: 0,
+          eta: undefined,
+          startedAt: Date.now(),
+          // For non-auto devices we already know what will be used; for auto
+          // we wait for the STATUS_DEVICE IPC event from the Python script.
+          actualDevice: selectedDevice !== 'auto' ? selectedDevice : undefined,
+        })
 
         const ipc = (window as any).ipc
         if (ipc) {
@@ -409,6 +424,24 @@ export default function HomePage() {
           </div>
         )
     }
+  }
+
+  const DEVICE_BADGE: Record<string, { label: string; classes: string }> = {
+    cuda:     { label: 'CUDA',     classes: 'bg-green-500/15 border-green-500/30 text-green-400' },
+    rocm:     { label: 'ROCm',     classes: 'bg-emerald-500/15 border-emerald-500/30 text-emerald-400' },
+    directml: { label: 'DirectML', classes: 'bg-purple-500/15 border-purple-500/30 text-purple-400' },
+    cpu:      { label: 'CPU',      classes: 'bg-gray-600/30 border-gray-500/30 text-gray-400' },
+  }
+
+  const DeviceBadge = ({ device }: { device: string }) => {
+    const cfg = DEVICE_BADGE[device]
+    if (!cfg) return null
+    return (
+      <span className={`inline-flex items-center gap-1 text-xs font-medium px-2 py-0.5 rounded-full border ${cfg.classes}`}>
+        <span className="w-1.5 h-1.5 rounded-full bg-current opacity-80" />
+        {cfg.label}
+      </span>
+    )
   }
 
   const getStatusBg = (status: QueueItem['status']) => {
@@ -641,14 +674,20 @@ export default function HomePage() {
                                 <div className="flex-1 min-w-0">
                                   <p className="text-white font-medium text-sm truncate mb-1" title={item.filePath}>{item.fileName}</p>
                                   {item.elapsedMs != null && item.status !== 'processing' && (
-                                    <span className="inline-flex items-center gap-1 text-xs text-gray-500 font-mono mb-1">
-                                      ⏱ {formatElapsed(item.elapsedMs)}
-                                    </span>
+                                    <div className="flex items-center gap-2 mb-1">
+                                      <span className="inline-flex items-center gap-1 text-xs text-gray-500 font-mono">
+                                        ⏱ {formatElapsed(item.elapsedMs)}
+                                      </span>
+                                      {item.actualDevice && <DeviceBadge device={item.actualDevice} />}
+                                    </div>
                                   )}
                                   {item.status === 'processing' && item.progress !== undefined && (
                                     <div className="mt-2">
                                       <div className="flex items-center justify-between mb-1">
-                                        <span className="text-xs font-medium text-blue-400">Processing...</span>
+                                        <div className="flex items-center gap-2">
+                                          <span className="text-xs font-medium text-blue-400">Processing...</span>
+                                          {item.actualDevice && <DeviceBadge device={item.actualDevice} />}
+                                        </div>
                                         <div className="flex items-center gap-2">
                                           {item.startedAt != null && (
                                             <span className="text-xs text-gray-400 font-mono">

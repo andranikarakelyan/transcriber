@@ -558,6 +558,7 @@ ipcMain.on('transcribe-audio', (event, data: { id: string; filePath: string; mod
             cpu: 'CPU',
           }
           sendLog('info', `[Queue] Auto-detected device: ${deviceLabels[detected] ?? detected}`)
+          event.reply('transcription-device', { id, device: detected })
         } else if (line.startsWith('OUTPUT:')) {
           outputPath = line.slice('OUTPUT:'.length)
         } else if (line.startsWith('ERROR:')) {
